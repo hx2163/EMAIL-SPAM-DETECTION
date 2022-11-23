@@ -31,8 +31,6 @@ Amazon SageMaker is available in the following AWS Regions:  N. Virginia, Oregon
 
 Once you've chosen a region, you should create all of the resources for this workshop there, including a new Amazon S3 bucket and a new SageMaker notebook instance. Make sure you select your region from the dropdown in the upper right corner of the AWS Console before getting started.
 
-![Region selection screenshot](images/region-selection.png)
-
 ### Browser
 
 We recommend you use the latest version of Chrome or Firefox to complete this workshop.
