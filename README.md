@@ -5,6 +5,9 @@ In this assignment you will Implement a machine learning model to predict whethe
 - Jindong Du (NetID:jd4573)
 - Han Xu     (NetID:hx2163)
 
+# Architecture Diagram
+![architectureDiagram](https://github.com/hx2163/nyu-fall2022-cc-hw3/blob/main/architectureDiagram.jpg)
+
 # Building Your Own ML Application with AWS Lambda and Amazon SageMaker
 
 In this workshop, we will step through the process of deploying and hosting machine learning (ML) models with AWS Lambda and get on-demand inferences. 
