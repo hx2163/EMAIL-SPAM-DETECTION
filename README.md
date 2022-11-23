@@ -1,3 +1,10 @@
+# Overview
+In this assignment you will Implement a machine learning model to predict whether a message is spam or not. Furthermore, you will create a system that upon receipt of an email message, it will automatically flag it as spam or not, based on the prediction obtained from the machine learning model.
+
+# Teammates
+- Jindong Du (NetID:jd4573)
+- Han Xu     (NetID:hx2163)
+
 # Building Your Own ML Application with AWS Lambda and Amazon SageMaker
 
 In this workshop, we will step through the process of deploying and hosting machine learning (ML) models with AWS Lambda and get on-demand inferences. 
@@ -58,7 +65,7 @@ Bonus:
 The contents of this workshop are licensed under the [Apache 2.0 License](./LICENSE).
 
 
-## Authors
+## Reference
 
 [Diego Natali](https://www.linkedin.com/in/diego-natali-63182b35/) - Solutions Architect - Amazon Web Services EMEA<br />
 [Giuseppe Porcelli](https://it.linkedin.com/in/giuporcelli) - Sr. Solutions Architect - Amazon Web Services EMEA
