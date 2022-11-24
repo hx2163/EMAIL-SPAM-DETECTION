@@ -5,6 +5,10 @@ In this assignment you will Implement a machine learning model to predict whethe
 - Jindong Du (NetID:jd4573)
 - Han Xu     (NetID:hx2163)
 
+
+# Example
+![example](https://github.com/hx2163/nyu-fall2022-cc-hw3/blob/main/example.jpg)
+
 # Architecture Diagram
 ![architectureDiagram](https://github.com/hx2163/nyu-fall2022-cc-hw3/blob/main/architectureDiagram.jpg)
 
