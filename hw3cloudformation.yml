@@ -1,0 +1,489 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFormation template for hw3 contains s3 lambda codepipeline ses
+#create a s3 named hw3-lambda-resource-bucket and upload lambda.py to it.
+Parameters:
+  CodePipelineProjectName:
+    Description: CodePipeline CD Project Name
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z][-a-zA-Z0-9]*$
+    Default: SampleCloudFormationCodePipeline
+  CodeBuildBFFStagingContaierBuildProjectName:
+    Description: CI CodeBuild Project Name
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z][-a-zA-Z0-9]*$
+    Default: SampleCloudFormationCodeBuildSpamEmail
+  CodeBuildBackendStagingContainerBuildProjectName:
+    Description: CI CodeBuild Project Name
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z][-a-zA-Z0-9]*$
+    Default: SampleCloudFormationCodeBuildCDBackend
+  S3BucketName:
+    Description: Type of this BacketName.
+    Type: String
+    Default: hw3-lambda-resource-bucket
+
+Resources:
+  #create two s3 buckets
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: store-email-bucket
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: store-email-bucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AllowSESPuts
+            Effect: Allow
+            Principal: 
+              Service: ses.amazonaws.com
+            Action:
+              - 's3:*'
+            Resource: !Join
+              - ''
+              - - 'arn:aws:s3:::'
+                - store-email-bucket
+                - /*
+            Condition:
+              StringEquals:
+                # 'AWS:SourceArn': arn:aws:ses:us-east-1:356677545444:receipt-rule-set/hx2163ruleset:receipt-rule/emailrule
+                'AWS:SourceArn': arn:aws:ses:us-east-1:356677545444:receipt-rule-set/hw3SESRuleSet:receipt-rule/recipientRule
+                'AWS:SourceAccount': 356677545444
+  S3Bucket2:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: store-trainingdata-bucket
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+  BucketPolicy2:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: store-trainingdata-bucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: PublicRead
+            Effect: Allow
+            Principal: '*'
+            Action:
+              - 's3:*'
+            Resource: !Join
+              - ''
+              - - 'arn:aws:s3:::'
+                - store-trainingdata-bucket
+                - /*
+#create lambda function                
+  CFNLambda:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: hw3_lambda
+      Handler: hw3_lambda.lambda_handler
+      Role:
+        'Fn::GetAtt':
+          - CFNLambdaRoles
+          - Arn
+      Code:
+        S3Bucket: hw3-lambda-resource-bucket
+        S3Key: Archive.zip
+      Runtime: python3.7
+      Layers:
+        - arn:aws:lambda:us-east-1:336392948345:layer:AWSSDKPandas-Python37:1
+      Timeout: 300
+  LambdaInvokePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      Principal: s3.amazonaws.com
+      FunctionName: !GetAtt
+        - CFNLambda
+        - Arn
+      SourceArn: !GetAtt
+        - SMSModelCWEvent
+        - Arn
+  #ses permission      
+  SESPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt CFNLambda.Arn
+      Action: lambda:InvokeFunction
+      Principal: ses.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: arn:aws:ses:us-east-1:356677545444:receipt-rule-set/hw3SESRuleSet:receipt-rule/recipientRule
+
+  SMSModelCWEvent:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Description: >-
+        Amazon CloudWatch Events rule to automatically start your pipeline when
+        a change occurs in the AWS CodeCommit source repository and branch.
+      EventPattern: !Sub 
+        - >-
+          {"source":["aws.s3"],"detail-type":["AWS API Call via
+          CloudTrail"],"detail":{"eventSource":["s3.amazonaws.com"],"eventName":["PutObject",
+          "CopyObject"
+          ],"requestParameters":{"bucketName":["${SourceS3Bucket}"]}}}
+        - SourceS3Bucket: store-email-bucket
+      Targets:
+        - Arn: !GetAtt 
+            - CFNLambda
+            - Arn
+          Id: S3Bucket
+      State: ENABLED
+
+  CFNLambdaRoles:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: hw3_lambda_role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: AWSLambdaBasicExecutionRole
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: '*'
+        - PolicyName: AmazonS3FullAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - 's3:*'
+                  - 's3-object-lambda:*'
+                Resource: 
+                  - '*'
+        - PolicyName: AmazonSageMaker-ExecutionPolicy-CF
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement: 
+              - Effect: Allow
+                Action: 
+                  - 's3:ListBucket'
+                  - 'sagemaker:InvokerEndpoint'
+                  - 's3:PutObject'
+                  - 's3:GetObject'
+                  - 's3:DeleteObject'
+                Resource: !Join
+                  - ''
+                  - - 'arn:aws:s3:::'
+                    - store-trainingdata-bucket
+                    - /*
+        - PolicyName: AmazonSageMaker-ExecutionPolicy-CF2
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement: 
+              - Effect: Allow
+                Action: 
+                  - 'sagemaker:InvokerEndpoint'
+                Resource:
+                  - '*'
+        - PolicyName: AmazonSESFullAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement: 
+              - Effect: Allow
+                Action: 
+                  - "ses:*"
+                Resource: 
+                  - "*"
+        - PolicyName: AWSLambdaRole
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement: 
+              - Effect: Allow
+                Action: 
+                  - "lambda:InvokeFunction"
+                Resource: 
+                  - "*"
+        - PolicyName: AmazonS3ObjectLambdaExecutionRolePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement: 
+              - Effect: Allow
+                Action: 
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                  - "s3-object-lambda:WriteGetObjectResponse"
+                Resource: 
+                  - "*"
+
+
+#codepipeline
+  SampleCloudFormationCodePipelineProject:
+    Type: AWS::CodePipeline::Pipeline
+    # DependsOn: SampleCloudFormationS3BucketForCodePipeline
+    Properties:
+      Name: SampleCloudFormationCodePipeline
+      RoleArn: !GetAtt SampleCloudFormationCodePipelineServiceRole.Arn
+      Stages:
+        - Name: SourceStage
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: "1"
+              OutputArtifacts:
+                - Name: SourceOutput
+              Configuration:
+                Owner: "djd28176"
+                Repo: hw3-codepipeline
+                Branch: main
+                OAuthToken: "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"
+              RunOrder: 1
+        - Name: BackendStagingBuildStage
+          Actions:
+            - Name: BackendStagingBuildAction
+              InputArtifacts:
+                - Name: SourceOutput
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              # OutputArtifacts:
+              #   - Name: BuildBackendStagingArtifact
+              Configuration:
+                ProjectName: !Ref SampleCloudFormationCodeBuildBackendStagingBuildContainer
+      ArtifactStore:
+        Location: !Ref S3BucketName
+        Type: S3
+        
+  SampleCloudFormationCodePipelineServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${CodePipelineProjectName}-codepipeline-base-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - elasticbeanstalk:*
+                  - ec2:*
+                  - elasticloadbalancing:*
+                  - autoscaling:*
+                  - cloudwatch:*
+                  - s3:*
+                  - sns:*
+                  - cloudformation:*
+                  - rds:*
+                  - sqs:*
+                  - ecs:*
+                Resource: "*"
+                Effect: Allow
+              - Action:
+                  - codecommit:GetBranch
+                  - codecommit:GetCommit
+                  - codecommit:GetUploadArchiveStatus
+                  - codecommit:UploadArchive
+                  - codecommit:CancelUploadArchive
+                Resource: "*"
+                Effect: Allow
+              - Action:
+                  - codedeploy:CreateDeployment
+                  - codedeploy:GetApplicationRevision
+                  - codedeploy:GetDeployment
+                  - codedeploy:GetDeploymentConfig
+                  - codedeploy:RegisterApplicationRevision
+                Resource: "*"
+                Effect: Allow
+              - Action:
+                  - codebuild:BatchGetBuilds
+                  - codebuild:StartBuild
+                Resource: "*"
+                Effect: Allow
+              - Action:
+                  - iam:PassRole
+                Resource: "*"
+                Effect: Allow
+                Condition:
+                  StringEqualsIfExists:
+                    iam:PassedToService:
+                      - cloudformation.amazonaws.com
+                      - elasticbeanstalk.amazonaws.com
+                      - ec2.amazonaws.com
+                      - ecs-tasks.amazonaws.com
+              - Action:
+                  - lambda:InvokeFunction
+                  - lambda:ListFunctions
+                  - lambda:*
+                Resource: "*"
+                Effect: Allow
+             
+        - PolicyName: !Sub ${CodePipelineProjectName}-ssm-parameterstore-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - "*"
+                Action:
+                  - ssm:DescribeParameters
+              - Effect: Allow
+                Resource:
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*
+                Action:
+                  - ssm:GetParameters
+
+
+  SampleCloudFormationCodeBuildBackendStagingBuildContainer:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Ref CodeBuildBackendStagingContainerBuildProjectName
+      Source:
+        Type: CODEPIPELINE
+        GitCloneDepth: 1
+        BuildSpec: buildspec.yml
+      Environment:
+        PrivilegedMode: True
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/standard:2.0
+        ComputeType: BUILD_GENERAL1_SMALL
+      ServiceRole: !Ref SampleCloudFormationCodeBuildBackendStagingServiceRole
+      Artifacts:
+        Type: CODEPIPELINE
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Sub ${CodeBuildBackendStagingContainerBuildProjectName}-CloudWatchLogs-BuildLogGroup-Name
+
+  SampleCloudFormationCodeBuildBackendStagingServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${CodeBuildBackendStagingContainerBuildProjectName}-codebuild-base-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${CodeBuildBackendStagingContainerBuildProjectName}-CloudWatchLogs-BuildLogGroup-Name
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${CodeBuildBackendStagingContainerBuildProjectName}-CloudWatchLogs-BuildLogGroup-Name:*
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+              - Effect: Allow
+                Resource:
+                  - !Sub arn:aws:s3:::${S3BucketName}/*
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+        - PolicyName: !Sub ${CodeBuildBackendStagingContainerBuildProjectName}-codebuild-vpc-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - "*"
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeDhcpOptions
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeVpcs
+              - Effect: Allow
+                Resource:
+                  - "*"
+                Action:
+                  - lambda:AddPermission
+                  - lambda:RemovePermission
+                  - lambda:CreateAlias
+                  - lambda:UpdateAlias
+                  - lambda:DeleteAlias
+                  - lambda:UpdateFunctionCode
+                  - lambda:UpdateFunctionConfiguration
+                  - lambda:PutFunctionConcurrency
+                  - lambda:DeleteFunctionConcurrency
+                  - lambda:PublishVersion
+              
+        - PolicyName: !Sub ${CodeBuildBackendStagingContainerBuildProjectName}-ssm-parameterstore-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - "*"
+                Action:
+                  - ssm:DescribeParameters
+              - Effect: Allow
+                Resource:
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*
+                Action:
+                  - ssm:GetParameters
+
+
+  ReceiptRuleSet:
+    Type: 'AWS::SES::ReceiptRuleSet'
+    Properties:
+      RuleSetName: hw3SESRuleSet
+  SESRule:
+    Type: 'AWS::SES::ReceiptRule'
+    Properties:
+      RuleSetName: hw3SESRuleSet
+      Rule:
+        # Recipients:
+        #   - hw3.hx2613.info
+        Name: recipientRule
+        Enabled: true
+        ScanEnabled: true
+        # TlsPolicy: !Ref TlsPolicy
+        Actions:
+        - S3Action:
+            BucketName: store-email-bucket
+        - LambdaAction:
+            FunctionArn : !GetAtt CFNLambda.Arn
+            InvocationType: Event
