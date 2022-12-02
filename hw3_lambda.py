@@ -9,7 +9,7 @@ import numpy as np
 from hashlib import md5
 
 
-ENDPOINT = 'sms-spam-classifier-mxnet-2022-12-01-00-28-46-571'
+ENDPOINT = 'sms-spam-classifier-mxnet-2022-11-23-18-35-44-332'
 
 
 if sys.version_info < (3,):
